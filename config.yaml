@@ -1,0 +1,187 @@
+# Confessional Agency Ecosystem (CAE) Configuration
+# Unified TRuCAL + CSS Settings
+
+# Model Configuration
+model:
+  d_model: 256
+  max_seq_length: 512
+  device: "auto"  # auto, cuda, cpu
+  
+# Base Model Configuration
+base_model: "microsoft/DialoGPT-medium"
+# Alternative options:
+# - "gpt2"
+# - "facebook/bart-base"
+# - "t5-base"
+# - "microsoft/DialoGPT-large"
+
+# Safety Model Configuration
+safety_model_name: "openai/gpt-oss-safeguard-20b"
+safety_policy_path: null  # Path to custom safety policy file
+
+# Attention-Layer Safety (TRuCAL-enhanced)
+attention_safety:
+  enabled: true
+  trigger_threshold: 0.04
+  aggregation_method: "bayesian"  # bayesian or weighted_sum
+  max_cycles: 16
+  early_stop_coherence: 0.85
+  per_dim_kl: true
+  
+  # Vulnerability detection weights
+  vulnerability_weights:
+    scarcity: 0.25
+    entropy: 0.25
+    deceptive: 0.2
+    prosody: 0.15
+    policy: 0.15
+
+# Inference-Time Safety (CSS-enhanced)
+inference_safety:
+  enabled: true
+  tau_delta: 0.92  # Crisis threshold
+  
+  # Distress kernel settings
+  distress:
+    cache_size: 1000
+    tau_delta: 0.92
+    
+  # Bayesian risk assessment
+  risk:
+    num_signals: 5
+    alpha: 0.001
+    dirichlet_concentration: 1.0
+    thresholds:
+      low: 0.3
+      mid: 0.55
+      high: 0.8
+
+# Multimodal Analysis
+multimodal:
+  enabled: true
+  
+  # Audio prosody analysis
+  audio:
+    enabled: true
+    sample_rate: 22050
+    n_mfcc: 13
+    hop_length: 512
+    
+  # Visual emotion analysis
+  visual:
+    enabled: true
+    face_detection: true
+    emotion_model: "resnet18"
+
+# Confessional Recursion
+confessional:
+  max_recursion_depth: 8
+  ignition_threshold: 0.88
+  kl_penalty_weight: 0.1
+  recursion_model: "gpt2"
+  max_new_tokens: 150
+  
+  # Template configuration
+  templates:
+    - "prior"
+    - "evidence"
+    - "posterior"
+    - "relational_check"
+    - "moral"
+    - "action"
+    - "consequence"
+    - "community"
+
+# Community Templates
+community:
+  enabled: true
+  template_registry: "federated"
+  validation_threshold: 0.7
+  update_frequency: "daily"
+  
+  # Federated learning settings
+  federated:
+    num_participants: 10
+    rounds: 5
+    local_epochs: 3
+
+# Performance Optimization
+performance:
+  batch_size: 32
+  use_cache: true
+  cache_size: 10000
+  gradient_checkpointing: true
+  mixed_precision: true
+  compile_model: false  # PyTorch 2.0+ feature
+
+# Logging and Monitoring
+logging:
+  level: "INFO"
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "/app/logs/cae.log"
+  max_size: "10MB"
+  backup_count: 5
+  
+  # Metrics collection
+  metrics:
+    enabled: true
+    interval: 60  # seconds
+    output_dir: "/app/metrics"
+
+# Benchmarking
+benchmarks:
+  enabled: true
+  datasets:
+    - "truthful_qa"
+    - "adv_bench"
+    - "big_bench"
+    - "custom_moral"
+  
+  evaluation:
+    batch_size: 16
+    num_samples: 1000
+    metrics: ["accuracy", "precision", "recall", "f1", "latency"]
+
+# API Configuration
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 4
+  timeout: 30
+  max_requests: 1000
+  
+  # Security
+  rate_limit: "100/minute"
+  api_key_required: false
+  cors_origins: ["*"]
+
+# Deployment
+deployment:
+  environment: "production"  # development, staging, production
+  debug: false
+  reload: false
+  
+  # Resource limits
+  max_memory: "8GB"
+  max_gpu_memory: "80%"
+  
+  # Scaling
+  autoscale:
+    enabled: true
+    min_replicas: 1
+    max_replicas: 10
+    target_cpu: 70
+    target_memory: 80
+
+# Experimental Features
+experimental:
+  penitential_loop: true
+  federated_auditing: true
+  zero_knowledge_proofs: false
+  asi_simulation: false
+  
+  # Research features
+  research:
+    agency_preservation_metrics: true
+    epistemic_humility_quantification: true
+    moral_development_tracking: true

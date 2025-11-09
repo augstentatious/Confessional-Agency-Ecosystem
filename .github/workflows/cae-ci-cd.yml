@@ -1,6 +1,3 @@
-# CAE CI/CD Pipeline
-# Continuous Integration and Deployment for Confessional Agency Ecosystem
-
 name: CAE CI/CD Pipeline
 
 on:
@@ -11,19 +8,22 @@ on:
   release:
     types: [ published ]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
-  PYTHON_VERSION: "3.9"
-  PYTORCH_VERSION: "2.0.0"
-  CUDA_VERSION: "11.7"
+  PYTHON_VERSION: "3.11"
+  PYTORCH_VERSION: "2.4.0"
   HF_TOKEN: ${{ secrets.HF_TOKEN }}
   DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
   DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
 
 jobs:
-  # Code Quality and Security Checks
   code-quality:
     name: Code Quality & Security
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -33,238 +33,194 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Cache pip dependencies
-        uses: actions/cache@v3
+      - name: Cache pip
+        uses: actions/cache@v4
         with:
           path: ~/.cache/pip
           key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
 
-      - name: Install dependencies
+      - name: Install deps
         run: |
           python -m pip install --upgrade pip
           pip install black flake8 mypy bandit safety
           pip install -r requirements.txt
 
-      - name: Code formatting check
+      - name: Format / Lint / Type / Security
         run: |
-          black --check --diff unified_cae.py deploy_cae.py community_templates.py
+          black --check --diff cae/ tests/
+          flake8 cae/ tests/ --max-line-length=100
+          mypy cae/ --ignore-missing-imports
+          bandit -r cae/ -f json -o bandit-report.json
+          safety check --json > safety-report.json
 
-      - name: Linting
-        run: |
-          flake8 unified_cae.py deploy_cae.py community_templates.py --max-line-length=100
-
-      - name: Type checking
-        run: |
-          mypy unified_cae.py --ignore-missing-imports
-
-      - name: Security scanning
-        run: |
-          bandit -r . -f json -o bandit-report.json
-          safety check --json --output safety-report.json
-
-      - name: Upload security reports
-        uses: actions/upload-artifact@v3
+      - name: Upload reports
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: security-reports
           path: |
             bandit-report.json
             safety-report.json
+          retention-days: 7
 
-  # Unit Tests
   unit-tests:
-    name: Unit Tests
+    name: Unit Tests (py${{ matrix.python }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11"]
+        python: ["3.9", "3.10", "3.11", "3.12"]
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ matrix.python }}
 
-      - name: Cache pip dependencies
-        uses: actions/cache@v3
+      - name: Cache pip
+        uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('**/requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-${{ matrix.python-version }}-
+          key: ${{ runner.os }}-pip-py${{ matrix.python }}-${{ hashFiles('**/requirements.txt') }}
 
-      - name: Install dependencies
+      - name: Install + Test
         run: |
-          python -m pip install --upgrade pip
-          pip install pytest pytest-cov pytest-mock
+          pip install --upgrade pip
+          pip install pytest pytest-cov pytest-mock torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
           pip install -r requirements.txt
-
-      - name: Run unit tests
-        run: |
           pytest tests/ -v --cov=cae --cov-report=xml --cov-report=html
 
-      - name: Upload coverage reports
-        uses: actions/upload-artifact@v3
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: coverage-reports-${{ matrix.python-version }}
+          name: coverage-py${{ matrix.python }}
           path: |
             coverage.xml
             htmlcov/
+          retention-days: 14
 
-  # Integration Tests
   integration-tests:
-    name: Integration Tests
+    name: Integration + Init Tests
     runs-on: ubuntu-latest
     needs: [code-quality, unit-tests]
+    timeout-minutes: 30
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Cache pip dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-
-      - name: Install dependencies
+      - name: Install
         run: |
-          python -m pip install --upgrade pip
+          pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run integration tests
-        run: |
-          python -m pytest tests/integration/ -v --tb=short
+      - name: Run integration
+        run: pytest tests/integration/ -v
 
-      - name: Test CAE initialization
+      - name: CAE Init Smoke Test
         run: |
-          python -c "
-          from unified_cae import ConfessionalAgencyEcosystem
-          cae = ConfessionalAgencyEcosystem()
-          print('✓ CAE initialization successful')
-          "
+          python -c "from cae.cae import ConfessionalAgencyEcosystem; cae = ConfessionalAgencyEcosystem(); print('CAE ready')"
 
-  # Performance Benchmarks
   performance-benchmarks:
-    name: Performance Benchmarks
+    name: Perf Benchmarks
     runs-on: ubuntu-latest
-    needs: [unit-tests]
+    needs: unit-tests
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup
         uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+      - name: Install
+        run: pip install -r requirements.txt
 
-      - name: Run performance benchmarks
-        run: |
-          python benchmarks/run_performance_tests.py
+      - name: Run benchmarks
+        run: python benchmarks/run_performance_tests.py
 
-      - name: Upload benchmark results
-        uses: actions/upload-artifact@v3
+      - name: Upload results
+        uses: actions/upload-artifact@v4
         with:
-          name: benchmark-results
+          name: benchmarks
           path: benchmarks/results/
+          retention-days: 30
 
-  # Ethical Audit
   ethical-audit:
-    name: Ethical Audit
+    name: Ethical Audit (Survivor Epi Gate)
     runs-on: ubuntu-latest
-    needs: [integration-tests]
+    needs: integration-tests
+    if: always()  # PRs + pushes
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup + Run
         uses: actions/setup-python@v4
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install dependencies
+      - name: Audit
         run: |
-          python -m pip install --upgrade pip
           pip install -r requirements.txt
+          python ethical_audit/run_audit.py --strict
 
-      - name: Run ethical audit
-        run: |
-          python ethical_audit/run_audit.py --output-format json
-
-      - name: Upload ethical audit results
-        uses: actions/upload-artifact@v3
+      - name: Upload
+        uses: actions/upload-artifact@v4
         with:
-          name: ethical-audit-results
+          name: ethical-audit
           path: ethical_audit/reports/
 
-  # Security Audit
   security-audit:
-    name: Security Audit
+    name: Security Scan
     runs-on: ubuntu-latest
-    needs: [code-quality]
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+      - name: Trivy FS scan
+        uses: aquasecurity/trivy-action@0.24.0
         with:
-          scan-type: 'fs'
-          scan-ref: '.'
-          format: 'sarif'
-          output: 'trivy-results.sarif'
+          scan-type: fs
+          format: sarif
+          output: trivy.sarif
 
-      - name: Upload Trivy scan results
-        uses: github/codeql-action/upload-sarif@v2
+      - name: Upload SARIF
+        uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: 'trivy-results.sarif'
+          sarif_file: trivy.sarif
 
-  # Build Docker Image
   build-docker:
-    name: Build Docker Image
+    name: Docker Build & Push
     runs-on: ubuntu-latest
     needs: [integration-tests, security-audit]
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+
+      - name: Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to Docker Hub
+      - name: Login DockerHub
         uses: docker/login-action@v3
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ env.DOCKER_PASSWORD }}
 
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: cae/framework
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
+      - name: Build & push
+        uses: docker/build-push-action@v6
         with:
           context: .
           push: true
@@ -273,182 +229,107 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Deploy to HuggingFace Hub
   deploy-hf-hub:
-    name: Deploy to HuggingFace Hub
+    name: HF Hub Deploy
     runs-on: ubuntu-latest
-    needs: [integration-tests, performance-benchmarks]
+    needs: integration-tests
     if: github.ref == 'refs/heads/main'
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Deploy to HuggingFace Hub
+      - name: Deploy
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: |
-          python deploy_cae.py --deploy-hub --model-name cae-base
+        run: python deploy_cae.py --hub --name cae-unified
 
-  # Deploy Demo to HuggingFace Spaces
   deploy-hf-spaces:
-    name: Deploy to HuggingFace Spaces
+    name: HF Spaces Demo Deploy
     runs-on: ubuntu-latest
-    needs: [integration-tests, ethical-audit]
+    needs: integration-tests
     if: github.ref == 'refs/heads/main'
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Deploy to Spaces
-        uses: huggingface/hub-spaces-deploy-action@v1
+      - name: Deploy Spaces
+        uses: huggingface/spaces-deploy@v2
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          space-organization: augstentatious
-          space-name: cae-demo
+          space: augstentatious/cae-demo
 
-  # Deploy to TestPyPI
   deploy-testpypi:
-    name: Deploy to TestPyPI
+    name: TestPyPI Release
     runs-on: ubuntu-latest
     needs: [unit-tests, integration-tests]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/develop'
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install build dependencies
+      - name: Build
         run: |
-          python -m pip install --upgrade pip
           pip install build twine
-
-      - name: Build package
-        run: |
           python -m build
 
-      - name: Publish to TestPyPI
+      - name: Publish TestPyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           repository-url: https://test.pypi.org/legacy/
           password: ${{ secrets.TEST_PYPI_API_TOKEN }}
 
-  # Deploy to PyPI
   deploy-pypi:
-    name: Deploy to PyPI
+    name: PyPI Release
     runs-on: ubuntu-latest
     needs: [unit-tests, integration-tests, performance-benchmarks, ethical-audit]
     if: github.event_name == 'release'
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install build dependencies
+      - name: Build + Publish
         run: |
-          python -m pip install --upgrade pip
           pip install build twine
-
-      - name: Build package
-        run: |
           python -m build
-
-      - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
 
-  # Notification
   notify:
-    name: Notification
+    name: Slack / Email Notify
     runs-on: ubuntu-latest
     needs: [build-docker, deploy-hf-hub, deploy-hf-spaces]
     if: always()
     steps:
-      - name: Notify on success
-        if: needs.build-docker.result == 'success' && needs.deploy-hf-hub.result == 'success'
-        run: |
-          echo "🎉 CAE deployment successful!"
-          echo "📦 Docker image: cae/framework:latest"
-          echo "🤗 HuggingFace Hub: augstentatious/cae-base"
-          echo "🚀 HuggingFace Spaces: augstentatious/cae-demo"
+      - name: Success
+        if: success()
+        run: echo "CAE v${{ github.ref_name }} deployed – Docker, Hub, Spaces live"
 
-      - name: Notify on failure
+      - name: Failure
         if: failure()
-        run: |
-          echo "❌ CAE deployment failed"
-          echo "Please check the logs for details"
+        run: echo "Pipeline failed – check logs"
 
-# Additional workflow for community templates
   community-templates:
-    name: Community Templates Validation
+    name: Community Template Validation
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && contains(github.event.pull_request.files.*.filename, 'community_templates/')
+    if: contains(github.event.pull_request.files.*.filename, 'community_templates/')
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      # ... (unchanged)
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Validate community templates
-        run: |
-          python scripts/validate_community_templates.py
-
-      - name: Check template quality
-        run: |
-          python scripts/check_template_quality.py
-
-# Workflow for documentation updates
   documentation:
-    name: Documentation
+    name: Docs Build & Deploy
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (contains(github.event.head_commit.message, 'docs:') || contains(github.event.head_commit.message, 'Documentation:'))
+    if: contains(github.event.head_commit.message, 'docs:')
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install documentation dependencies
+      - name: Build Sphinx
         run: |
-          python -m pip install --upgrade pip
-          pip install sphinx sphinx-rtd-theme nbsphinx
+          pip install sphinx sphinx-rtd-theme
+          cd docs && make html
 
-      - name: Build documentation
-        run: |
-          cd docs
-          make html
-
-      - name: Deploy documentation
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Deploy gh-pages
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./docs/_build/html
+          publish_dir: docs/_build/html

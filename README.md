@@ -11,9 +11,10 @@ A paradigm-shifting framework for AI moral development and safety. CAE integrate
 
 ## Quick Start
 
-pip install -r requirements.txt
-python cae_demo.py # Gradio UI for confessional queries
-
+git clone https://github.com/augstentatious/Confessional-Agency-Ecosystem
+cd Confessional-Agency-Ecosystem
+pip install -r requirements.txt  # (add the list above)
+python cae_demo.py  # Gradio UI with live metadata, ignition plots, EnmeshBench eval
 
 ## Demos & Papers
 - HF Spaces: [Link coming]

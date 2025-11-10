@@ -42,8 +42,6 @@ Production-ready PyTorch implementation of the Private Confessional Layer (PCL) 
 pip install -r requirements.txt
 python private_confessional_layer.py # Run tests
 
-text
-
 ## Architecture Overview
 
 Input → [Public Self-Attention] ──┐

@@ -26,3 +26,6 @@ Inspired by St. Augustine's *Confessions* and survivor epistemics. For ASI safet
 
 ## Citation
 Young, J.A. et al. (2025). CAE: Confessional Agency for Emergent Moral AI. arXiv preprint.
+
+**"Beyond Private Chain-of-Thought: Consent-Based Transparency for Deliberative AI Alignment"**  
+*John Augustine Young, 2025*

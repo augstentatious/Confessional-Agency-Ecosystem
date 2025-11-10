@@ -84,14 +84,11 @@ text
 
 ## Citation
 
-@article{young2025confessional,
-title={Beyond Private Chain-of-Thought: Consent-Based Transparency for Deliberative AI Alignment},
+{Beyond Private Chain-of-Thought: Consent-Based Transparency for Deliberative AI Alignment},
 author={Young, John Augustine},
 journal={arXiv preprint arXiv:XXXX.XXXXX},
 year={2025}
 }
-
-text
 
 ## License
 

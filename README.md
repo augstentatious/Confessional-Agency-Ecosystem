@@ -29,3 +29,70 @@ Young, J.A. et al. (2025). CAE: Confessional Agency for Emergent Moral AI. arXiv
 
 **"Beyond Private Chain-of-Thought: Consent-Based Transparency for Deliberative AI Alignment"**  
 *John Augustine Young, 2025*
+
+# Confessional Agency Layer - Implementation
+
+Production-ready PyTorch implementation of the Private Confessional Layer (PCL) from:
+
+**"Beyond Private Chain-of-Thought: Consent-Based Transparency for Deliberative AI Alignment"**  
+*John Augustine Young, 2025*
+
+## Quick Start
+
+pip install -r requirements.txt
+python private_confessional_layer.py # Run tests
+
+text
+
+## Architecture Overview
+
+Input → [Public Self-Attention] ──┐
+└→ [Private Projection] → [Recursive CoT] → [v_t Monitor] ─┘
+↓
+[Integration Gate] → Output
+
+text
+
+## Usage Example
+
+from private_confessional_layer import PrivateConfessionalLayer
+
+Initialize layer
+pcl = PrivateConfessionalLayer(
+d_model=768, # Match your transformer
+d_private=384, # Bottleneck (d/2)
+num_heads=12,
+max_cycles=16
+)
+
+Forward pass with consent control
+output, metadata = pcl(
+x=embeddings,
+disclosure_context='routine' # or 'audit', 'safety_critical', 'user_request'
+)
+
+text
+
+## Disclosure Contexts
+
+| Context | Privacy | Use Case |
+|---------|---------|----------|
+| `routine` | Full | Normal operations |
+| `safety_critical` | Conditional | High-stakes decisions |
+| `audit` | None | Investigation/debugging |
+| `user_request` | Model-decided | User asks for reasoning |
+
+## Citation
+
+@article{young2025confessional,
+title={Beyond Private Chain-of-Thought: Consent-Based Transparency for Deliberative AI Alignment},
+author={Young, John Augustine},
+journal={arXiv preprint arXiv:XXXX.XXXXX},
+year={2025}
+}
+
+text
+
+## License
+
+MIT License - See LICENSE file for details
